@@ -1,0 +1,15 @@
+[project]
+name = "deep-agent-suite"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "markitdown>=0.1.6",
+    "openai>=2.44.0",
+    "openpyxl>=3.1.5",
+    "pillow>=12.3.0",
+    "python-docx>=1.2.0",
+    "python-dotenv>=1.2.2",
+    "python-pptx>=1.0.2",
+]
