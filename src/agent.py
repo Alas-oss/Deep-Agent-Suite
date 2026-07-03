@@ -6,7 +6,6 @@ from openai import OpenAI
 from pptx import Presentation
 from pathlib import Path
 
-# from tools import TOOL_REGISTRY
 root_dir = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=root_dir / ".env")
 
