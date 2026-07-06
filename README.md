@@ -1,8 +1,8 @@
 # Lightweight Multi-Model Deep Agent Suite
 
-This is an autonomous ReAct (Reason-Act) agent that is both robust and light in terms of dependency, that is a loop framework and is built to orchestrate multi-model office tasks, docuent parsing, and formula audits. Operating entirely via Groq API, this agent supervisor coordinates tasks across `.pptx` and `.xlsx` structure and delegates validation checks to specialized sub-agents.
+This is an autonomous ReAct (Reason-Act) agent loop framework built from scratch to orchestrate multi-model office tasks, document parsing, and formula audits. Operating via the Groq API, this agent supervisor coordinates tasks across `.pptx` and `.xlsx` file structures, runs commands inside a sanitized local sandbox, and delegates validation checks to specialized sub-agents.
 
-## Architectural Alignment with Core Repositories
+## Key Structural Features
 
 This project maps production patters from well-established agent repositories into an independent execution harness:
 
