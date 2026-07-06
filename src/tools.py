@@ -4,6 +4,8 @@ import zipfile
 import subprocess
 from markitdown import MarkItDown
 from openpyxl import Workbook
+from docx import Document
+from pptx import Presentation
 
 md_converter = MarkItDown()
 
@@ -62,9 +64,74 @@ def execute_shell_command(command: str, **kwargs) -> str:
     except Exception as e:
         return f"Shell execution failed with system exception: {str(e)}"
 
+def create_word_document(filepath: str, content: str = "", title: str = "Executive Report", **kwargs) -> str:
+    try:
+        doc = Document()
+        doc.add_heading(title, level=0)
+
+        lines = content.split("\n")
+        for line in lines:
+            if line.strip().startswith("#"):
+                doc.add_heading(line.replace("#", "").strip(), level=1)
+            elif line.strip():
+                doc.add_paragraph(line)
+        # if isinstance(paragraphs, str):
+        #     text_blocks = json.loads(paragraphs)
+        # else: 
+        #     text_blocks = paragraphs
+
+        # for block in text_blocks:
+        #     if isinstance(block, dict) and "heading" in block:
+        #         doc.add_heading(block["heading"], level=int(block.get("level", 1)))
+        #     elif isinstance(block, dict) and "text" in block:
+        #         doc.add_paragraph(block["text"])
+        #     else:
+        #         doc.add_paragraph(str(block))
+            
+        doc.save(filepath)
+        return f"Generated a Microsoft Word narrative file at {filepath}."
+    except Exception as e:
+        return f"Word document creation failed: {str(e)}"
+    
+def append_text_to_document(filepath: str, content: str, **kwargs) -> str:
+    try:
+        if not os.path.exists(filepath):
+            doc = Document()
+            doc.add_heading("Automated Updates Document log", level=1)
+        else:
+            doc = Document(filepath)
+
+        doc.add_paragraph(content)
+        doc.save(filepath)
+        return f"Appended content updates to {filepath}."
+    except Exception as e:
+        return f"Failed to append content onto text file target: {str(e)}"
+    
+def modify_presentation_metadata(filepath: str, action_type: str, raw_text_content: str, **kwargs) -> str:
+    try:
+        if not os.path.exists(filepath):
+            pres = Presentation()
+        else:
+            pres = Presentation(filepath)
+        
+        if action_type == "add_slide":
+            slide = pres.slides.add_slide(pres.slide_layouts[1])
+            slide.shapes.title.text = "Automated Agent Update Output"
+            body_shape = slide.shapes.placeholders[1]
+            body_shape.text = raw_text_content 
+        
+        pres.save(filepath)
+        return f"Modified PowerPoint file structure at {filepath}."
+    except Exception as e:
+        return f"Presentation pipeline modifications failed: {str(e)}"
+
+
 TOOL_REGISTRY = {
     "read_office_file": read_office_file,
     "unpack_raw_xml": unpack_raw_xml,
     "create_xlsx_with_formulas": create_xlsx_with_formulas,
-    "execute_shell_command": execute_shell_command
+    "execute_shell_command": execute_shell_command,
+    "create_word_document": create_word_document,
+    "append_text_to_document": append_text_to_document,
+    "modify_presentation_metadata": modify_presentation_metadata
 }

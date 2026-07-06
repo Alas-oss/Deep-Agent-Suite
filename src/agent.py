@@ -34,9 +34,9 @@ class DeepAgent:
         self.sandbox = AgentSandbox(scope="assistant", identifier="global")
 
         self.skills_rubric = {
-            "docx": "Exclusively for .docx targets. Extract text contents via 'read_office_file'. To view layout details or tracked changes, unzip the file container using 'unpack_raw_xml'.",
-            "pptx": "Triggers on decks/slides. Pull slide outlines using 'read_office_file'. For visual QA, use subagent verification states.",
-            "xlsx": "Handles tabular formats. CRITICAL CONSTRAINT: Enforce formula injection! Never hardcode mathematical summaries or averages using scalar numbers. Write active Excel formulas (e.g., =SUM(B1:B10))."
+            "docx": "Exclusively for word processing. Extract contents via 'read_office_file'. To generate executive summary papers or project files, utilize 'create_word_document'. Append audit trails using 'append_text_to_document'.",
+            "pptx": "Handles slide decks. Read layout files via 'read_office_file'. Append summary findings or update presentation structures dynamically using 'modify_presentation_metadata'.",
+            "xlsx": "Handles tabular formats. CRITICAL CONSTRAINT: Enforce formula injection! Never hardcode calculations. Write live formulas (e.g., =SUM(B1:B10)) via 'create_xlsx_with_formulas'."
         }
 
     def spawn_worker_subagent(self, context_key: str, worker_prompt: str) -> str:
@@ -52,7 +52,7 @@ class DeepAgent:
             {"role": "system", "content": subagent_base_prompt},
             {"role": "user", "content": worker_prompt}
         ]
-        res = client.chat.completions.create(model=MODEL_NAME, messages=messages, temperature=0.01)
+        res = client.chat.completions.create(model=MODEL_NAME, messages=messages, temperature=0.2)
         return res.choices[0].message.content
 
     
@@ -97,7 +97,7 @@ To execute environment terminal setup operations via your tool setup:
 
         for loop_idx in range(1, self.max_execution_rounds + 1):
             print(f"\n Loop Round {loop_idx} out of {self.max_execution_rounds}")
-            res = client.chat.completions.create(model=MODEL_NAME, messages=messages, temperature=0.01)
+            res = client.chat.completions.create(model=MODEL_NAME, messages=messages, temperature=0.2)
             
             thought = res.choices[0].message.content
             print(f"Agent Thought Process: \n {thought}")
@@ -122,7 +122,7 @@ To execute environment terminal setup operations via your tool setup:
                                 executed_any = True
                                 if payload["action"] == "call_tool":
                                     tool_return = self.sandbox.run_sandbox_tool(payload["tool_name"], **payload["args"])
-                                    print(f"Tool [{payload['tool_name']}] Output: {tool_return[:150]}")
+                                    print(f"Tool [{payload['tool_name']}] Output: {tool_return}")
                                     messages.append({"role": "user", "content": f"Tool Execution Output: {tool_return}"})
 
                                 elif payload["action"] == "delegate_subagent":
@@ -146,13 +146,14 @@ To execute environment terminal setup operations via your tool setup:
         self.sandbox.close_and_cleanup()
 
 if __name__ == "__main__":
-    test_instruction = (
-        "Read the text layout from the presentation 'sales.pptx', use those findings to create a clean "
-        "financial spreadsheet workbook named 'ledger.xlsx' enforcing strict Excel formulas for summary cells, "
-        "and delegate a subagent to run an audit on the formula architecture variables."
+    extended_cross_functional_objective = (
+        "1. Read the text layouts out of 'sales.pptx'.\n"
+        "2. Synthesize that financial data to build a clean spreadsheet named 'ledger.xlsx' enforcing strict dynamic formula injection for totals.\n"
+        "3. Generate a comprehensive project narrative file named 'executive_report.docx' outlining our findings.\n"
+        "4. Deploy an isolated subagent worker to run a verification layout checklist on the spreadsheet, and append those final audit notes directly to the bottom of the Word document report."
     )
     
-    orchestrator = DeepAgent(objective=test_instruction, user_id="user_101")
+    orchestrator = DeepAgent(objective=extended_cross_functional_objective, user_id="user_101")
 
     local_source_file = Path("sales.pptx")
     if not local_source_file.exists():
