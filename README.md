@@ -11,7 +11,7 @@ This project maps production patters from well-established agent repositories in
 - Strict formula Guardrails (`xlsx`): Fully enforces Anthropic's rule of "formulas should be used, and not hardcoded values." The agent parses structural statistics and dynamically generates live Excel formula strings (`=SUM(B2:B4)`) instead of using Python scalar math or hardcoding text totals.
 
 2. LangChain DeepAgents Execution Boundaries
-- Iteration Caps: The main controler is strictly locked to a maximum of **3 execution rounds** to eliminate recursive context window leakage and prevent infinite loops.
+- Iteration Caps: The main controler is strictly locked to a maximum of **4 execution rounds** to eliminate recursive context window leakage and prevent infinite loops.
 - Context Isolation via Workers: When running an audit or checking data layouts, the orchestrator forks execution to an isolated sub-agent module (`spawn_worker_subagent`). This guarantees that specialist instructions (e.g., the `xlsx` schema check rubric) never clutter or confuse the main supervisor's historical context window.
 
 ## Setup and Execution
