@@ -1,18 +1,15 @@
 # Lightweight Multi-Model Deep Agent Suite
 
-This is an autonomous ReAct (Reason-Act) agent loop framework built from scratch to orchestrate multi-model office tasks, document parsing, and formula audits. Operating via the Groq API, this agent supervisor coordinates tasks across `.pptx` and `.xlsx` file structures, runs commands inside a sanitized local sandbox, and delegates validation checks to specialized sub-agents.
+This is an autonomous ReAct (Reason-Act) agent loop framework built from scratch to orchestrate complex office pipelines, document text parsing, spreadsheet data rendering, and programmatic compliance audits. Operating via the Groq API, this agent supervisor coordinates tasks across `.pptx`, `.xlsx`, and `.docx` formats entirely within a localized, safe sandbox environment.
 
 ## Key Structural Features
 
-This project maps production patters from well-established agent repositories into an independent execution harness:
+* Dynamic Office Parsing (`.pptx` & `.docx`): Avoids heavy text processor platform dependencies by integrating the `markitdown` engine to natively extract text and layout structures into pure Markdown.
+* Formula Guardrails (`.xlsx`): Enforces dynamic formula injection over dead text metrics, or hardcoded values. The agent writes structured data matrix arrays containing active Excel formulas directly into `openpyxl`.
+* Flexible Parameter Wrapping: Includes adaptive tool wrappers to handle natural variation in model-generated argument structures, preventing missing parameter runtime crashes.
+* Iteration Caps: The main control loop is locked to a maximum of `4 execution rounds` to eliminate context leakage, control inference billing, and prevent infinite loop hangs.
+* Context Isolation via Workers: Forks execution to an isolated sub-agent module (`spawn_worker_subagent`). This guarantees that specialist instructions (i.e., the `xlsx` audit schema) never clutter the main supervisor's history window.
 
-1. Anthropic Office Skills Alignment
-- Lightweight Office Parsing (`pptx` & `docx`): Completely strips out multi-gigabyte background program dependencies. It achieves cross-model document reading by integrating Microsoft's `markitdown` engine to natively extract unstructured text and layout fields into pure Markdown.
-- Strict formula Guardrails (`xlsx`): Fully enforces Anthropic's rule of "formulas should be used, and not hardcoded values." The agent parses structural statistics and dynamically generates live Excel formula strings (`=SUM(B2:B4)`) instead of using Python scalar math or hardcoding text totals.
-
-2. LangChain DeepAgents Execution Boundaries
-- Iteration Caps: The main controler is strictly locked to a maximum of **4 execution rounds** to eliminate recursive context window leakage and prevent infinite loops.
-- Context Isolation via Workers: When running an audit or checking data layouts, the orchestrator forks execution to an isolated sub-agent module (`spawn_worker_subagent`). This guarantees that specialist instructions (e.g., the `xlsx` schema check rubric) never clutter or confuse the main supervisor's historical context window.
 
 ## Setup and Execution
 
@@ -41,6 +38,7 @@ uv run python src/agent.py
 
 ## Verification & Validation
 
-Once the processing cycle completes, you can verify compliance by checking two outputs:
-1. **Console Traces**: Review the terminal log stream. It will explicitly show the model calling `read_office_file`, computing data rows, and outputting a highly detailed spreadsheet auditing checklist via the `xlsx` sub-agent.
-2. **Spreadsheet Formulas**: Open the generated `data/ledger.xlsx` workbook using an extension or reader application. Click on the **Total** row and confirm that cell `B5` contains a dynamic Excel formula (`=SUM(B2:B4)`) rather than a hardcoded scalar number.
+Once the processing cycle completes, you can verify compliance by checking three outputs:
+1. **Console Traces**: Review the terminal log stream. It will track the supervisor batching tool calls, extracting a custom Python verification layout checklist via its worker sub-agent.
+2. **Spreadsheet Formulas:** Open the generated `ledger.xlsx` file in Excel. Click on the summary row and verify that the total cells contain active, calculating `=SUM(...)` formulas rather than hardcoded numeric values.
+3. **Word Documentation Report**: Open `executive_report.docx` in Word. Confirm that all structured headings text blocks have rendered successfully, and that sub-agent's verified audit footer is appended to the bottom page.

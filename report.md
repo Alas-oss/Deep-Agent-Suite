@@ -7,34 +7,31 @@ This project successfully implements an automated multi-agent cluster pipeline o
 - Main Supervisor Loop Model: `openai/gpt-oss-120b` (via Groq Client API)
 - Sub-Agent Worker Model: `openai/gpt-oss-120b` (via Groq Client API)
 - Telemetry State Integration: 4-Round Iterative ReAct Framework
+- Target Document Footprint: PowerPoint (`.pptx`), Excel (`.xlsx`), Word (`.docx`)
 
 ## 2. Real-World Execution Trace Analysis
 
-The system was evaluated against a multi-step financial objective: extract revenue metrics from a presentation slide deck (`sales.pptx`), generate an accounting spreadsheet (`ledger.xlsx`), and audit the formula architecture for hardcoded values.
+The framework was evaluated against a multi-step cross-functional objective: extract revenue metrics from a presentation slide deck (`sales.pptx`), generate an interactive accounting spreadsheet (`ledger.xlsx`), compile an executive text narrative (`executive_report.docx`), and deploy a specialized sub-agent to audit the formula layout and append its verification footprint.
 
 ## The Trace Pipeline Log Details:
-1. Loop Round 1 - Document Extraction: The orchestrator invoked the `read_office_file` tool wrapper. It leverages Microsoft's `MarkItDown` engine to parse the text layers out of the target slide container, extracting three core variabels:
+1. Loop Round 1 - Document Extraction: The orchestrator discovered a missing source file, automatically seeded a mock presentation via `python-pptx`, and called the `read_office_file` tool wrapper. It leverages Microsoft's `MarkItDown` engine to parse the text layers out of the target slide container, extracting three core variabels:
     * Expected License Sales: 50,000
     * Project Cloud Revenue: 120,000
     * Estimated Consulting Fees: 30,000
-2. Loop Round 2 - Structural Synthesis & Constraint Compliance: The main supervisor analyzed the extracted metrics and calles `create_xlsx_with_formulas`. It adheres to the given constraint rubric by mapping the rows as a matrix array and passing an active Excel formula string (`=SUM(B2:B4)`) directly into the summary cell.
-3. Loop round 3 - Multi-Agent Task Delegation: The supervisor identifies that an expert validation review is needed. It invokes the `"action": "delegate_subagent"` command block and created an isolated sub-agent. The sub-agent uses the specialized `xlsx` domain instructions to evaluate the generated file schema.
-4. Loop Round 4 - State Persistence & Teardown: The agent reviews the sub-agent validation response, terminates the runtime loop, writes execution metadata (`objective_status: Success`) to the `LongTermMemoryStore`, and prints the final workspace lifecycle logs.
+2. Loop Round 2 - Parallel Synthesis & Worker Delegation: The main supervisor bundled three complex operations into a single execution turn:
+    - It passed the extracted figures to `create_xlsx_with_formulas`, right after it built `ledger.xlsx` with active math formula strings.
+    - It invoked the parameter-matched `create_word_document` tool, and generated `executive_report.docx`.
+    - It spawned the specialized `.xlsx` sub-agent worker, handing it a layout audit checklist.
+3. Loop round 3 - Sub-Agent QA Verification: The sub-agent compiled its own evaluation matrix script using the `openpyxl` to programmatically crosscheck data types and column configurations. It onfirmed that all cells were numeric, no hidden columns existed, and harcoded numbers were replaced with live formula tracking. It then appended the official audit note: *“Spreadsheet audit passed: all formulas dynamic, no hard‑coded totals.”* directly to the bottom of the Word report.
+4. Loop Round 4 - Workspace Teardown: The supervisor verifiedthe sub-agent's success response. Finding its objectives completely fulfilled, it exited the execution state machine early, saved the metadata logging variables down to the `LongTermMemoryStore`, and executed the sandbox's `close_and_cleanup()` sequence.
 
 ## 3. Engineering Insights & Architectural Takeaways
 
 By designing this lightweight agent core around the specifications of the Anthropic and LangChain frameworks, several technical insights were observed:
 
-1. **Markdown Extraction (Zero-Dependency parsing)**: Traditional agent frameworks rely on massive software packages like LibreOffice or headless window layers to scrape data. By deploying Microsoft's `markitdown` library inside our `tools.py` file, it successfully transformed complex OpenXML file structures into light markdown text blocks, reducing latency and avoiding heavy downloads.
-2. **Context Isolation vs. Tool Hallucination**: During earlier development phases, the agent tended to hallucinate general tool names (like `write_excel_file`). By implementing a robust **Tool Alias Route Safety Patch** directly inside the JSON interpreter block, the orchestrator now catches naming deviations on the fly and translates them to functional Python tool calls seamlessly.
-3. **Workspace Input Sanitizer**: To mitigate path-traversal vulnerabilities common in automated tool-use scripts, `AgentSandbox` intercepts incoming keyword arguments. If a `"filepath"` key is present, the sandbox isolates and forces a flat filename extraction:
-```python
-if "filepath" in kwargs:
-    filename = Path(kwargs["filepath"]).name
-    kwargs["filepath"] = str(filename)
-```
-This forces all operations to resolve explicitly inside the localized root execution workspace (`Path(".").resolve()`).
-
+1. **Markdown Extraction (Zero-Dependency parsing)**: Traditional agent frameworks rely on massive software packages like LibreOffice or headless browser containers to scrape data. By deploying Microsoft's `markitdown` library inside the `tools.py` file, the system converts binary XML files into Markdown text streams, thus cutting down latency.
+2. **Context Isolation vs. Prompt Bloat**: Feeding exhaustive spreadsheet formatting rubrics and programmatic checklist checks directly into the main supervisor prompt window results in token bloat and dilutes attention. Forcing the supervisor to delegate validation loops to an isolated sub-agent via structured JSON commands keeps the primary planner highly efficient, while ensuring the validation report is detailed, informative, and secure.
+3. **Dynamic Parameter Adaptability**: AI models frequently vary keyword parameters when interfacing with custom tool definitions. By designing adaptive argument wrappers inside `tools.py` (e.g., matching the model's choice of `content` across both `Word` and `log` generation), the supervisor successfully routes multi-tool payloads without throwing missing positional argument exceptions.
 
 
 # 4. Architectural Evaluation: Trade-offs and Limitations
