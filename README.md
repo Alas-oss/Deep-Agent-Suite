@@ -1,44 +1,67 @@
-# Lightweight Multi-Model Deep Agent Suite
+# Deep Agent Suite
 
-This is an autonomous ReAct (Reason-Act) agent loop framework built from scratch to orchestrate complex office pipelines, document text parsing, spreadsheet data rendering, and programmatic compliance audits. Operating via the Groq API, this agent supervisor coordinates tasks across `.pptx`, `.xlsx`, and `.docx` formats entirely within a localized, safe sandbox environment.
+A supervisor/subagent "deep agent" that reads, writes, and edits Office documents (`.pptx`, `.docx`, `.xlsx`) by declaring skill-governed work to isolated subagents, each guided by personally written `SKILL.md` blueprints rather than built-in prompts.
 
-## Key Structural Features
+## What it does
+Given a plain-language task, either one of the buil-in example scenarios or free-form text types into the interactive session, a supervisor agent plans which skills are relevant, delegates the actual file work to subagents scopedto those skills, and returns a final summary. All generated files are generated in `outputs/`.
 
-* Dynamic Office Parsing (`.pptx` & `.docx`): Avoids heavy text processor platform dependencies by integrating the `markitdown` engine to natively extract text and layout structures into pure Markdown.
-* Formula Guardrails (`.xlsx`): Enforces dynamic formula injection over dead text metrics, or hardcoded values. The agent writes structured data matrix arrays containing active Excel formulas directly into `openpyxl`.
-* Flexible Parameter Wrapping: Includes adaptive tool wrappers to handle natural variation in model-generated argument structures, preventing missing parameter runtime crashes.
-* Iteration Caps: The main control loop is locked to a maximum of `4 execution rounds` to eliminate context leakage, control inference billing, and prevent infinite loop hangs.
-* Context Isolation via Workers: Forks execution to an isolated sub-agent module (`spawn_worker_subagent`). This guarantees that specialist instructions (i.e., the `xlsx` audit schema) never clutter the main supervisor's history window.
+Some exmaple tasks that it can handle include:
+- "Read sales.pptx and summarize the projected revenue."
+- "Build a spreadsheet with a formula-driven total row."
+- "Write a Word report with headed sections, then append audit notes to it."
+- "Add a summary slide to a PowerPoint deck."
+
+## Architecture
+main.py                   → entrypoint: scenario index, one-shot prompt, or interactive session
+run_all_scenarios.py       → regression harness across the 5 example scenarios
+skills/                    → one folder per skill, each with a SKILL.md blueprint
+  docx/SKILL.md
+  pptx/{SKILL.md, editing.md, pptxgenjs.md}
+  xlsx/SKILL.md
+outputs/                   → every generated file lands here (gitignored)
+src/
+  agent.py                 → DeepAgent: supervisor loop + subagent spawning
+  tools.py                 → tool implementations + native tool-calling schema
+  sandbox.py                → resolves all file I/O into outputs/
+  memory.py                 → simple JSON-backed long-term memory per user
+  scenarios.py               → the 5 example scenario definitions
+  tui.py                     → rich-based colored terminal output
+  .env                       → GROQ_API_KEY, LANGFUSE_* keys (not committed)
+
+## How the task follows through the system
+
+1. **Supervisor** `DeepAgent.execute_react_loop` receives the objective, sees a list of available skills: name + description, read from each `SKILL.md`'s frontmatter - and either calls tools directly or delegates to a subagent 
+2. **Delegation** `spawn_worker_subagent` loads the full skill blueprint via the `load_skill_blueprint` tool, restricts the subagent to only the tools that skill's frontmatter lists, and runs its own bounded tool-calling loop
+3. **Tools** `tool.py` do the actual file work, so reading office files via MarkItDown, writing `.xlsx`/`.docx`/`.pptx` via openpyxl/python-docx/python-ptx, and every call is routed through `AgentSandbox`, which resolves relative filenames into `outputs/` regardless of process working directory
+4. **Native tool calling**: both the supervisor and every subagent use Groq's structured `tools=`/`tool_calls` API rather than parsing JSON out of plain text, which was a deliberate fix after early iterations hit reliability issues with models emitting native tool-call syntax even when prompted to just "output JSON"
 
 
-## Setup and Execution
-
-### 1. Prerequisites
-Ensure you have Python 3.11+ and the **`uv` package manager** installed on your Windows machine.
-
-### 2. Synchronize Your Local Virtual Environment
-Run this command in your PowerShell terminal to automatically configure your isolated dependencies inside `.venv/`:
-```powershell
-uv sync
+## Setup
+`uv sync`
+add to src/.env:
+```
+GROQ_API_KEY=...
+LANGFUSE_PUBLIC_KEY=...
+LANGFUSE_SECRET_KEY=...
+LANGFUSE_HOST=...        # or LANGFUSE_BASE_URL, per your Langfuse dashboard
 ```
 
-### 3. Configure Your Secret Tokens
-Create a `.env` file directly in the project root directory and add your free developer tier key string:
-```text
-GROQ_API_KEY="your_groq_api_key"
-```
+## Usage 
+To run one of the 5 example scenarios by index (0-4 inclusive) - `uv run python main.py 0`
 
-### 4. Run the Automated Architecture Pipeline
-Trigger the complete agent cluster harness routine:
-```powershell
-uv run python src/agent.py
-```
+To run a one-shot custom prompt - `uv run python main.py "Your relevant prompt here"`
 
----
+To have an interactive session that keeps taking prompts until you type 'quit' or 'exit' - `uv run python main.py`
 
-## Verification & Validation
+For a quick test just run - `uv run python run_all_scenarios.py`
+This runs all 5 examples one after the other, and reports pass/fail based on wether each scenario's expected output files landed in `output/`
 
-Once the processing cycle completes, you can verify compliance by checking three outputs:
-1. **Console Traces**: Review the terminal log stream. It will track the supervisor batching tool calls, extracting a custom Python verification layout checklist via its worker sub-agent.
-2. **Spreadsheet Formulas:** Open the generated `ledger.xlsx` file in Excel. Click on the summary row and verify that the total cells contain active, calculating `=SUM(...)` formulas rather than hardcoded numeric values.
-3. **Word Documentation Report**: Open `executive_report.docx` in Word. Confirm that all structured headings text blocks have rendered successfully, and that sub-agent's verified audit footer is appended to the bottom page.
+## Observability
+
+Every run is traced to Langfuse (there are nested spans per subagent delegation and per model call), each trace is tagged with the objective text and user id, for reviewing wether the supervisor is actually routing to the right skill.
+
+## Known limitations and the roadmap
+
+- In it's current state, model choice matters a lot: smaller but faster Groq models have shown less reliable multi-step tool orchestrationin testing rather than larger ones, check `console.groq.com/docs/models` for current recommendations
+- I am planning on a LagnChain `deepagents`-based orchestration swap in a separate branch, keeping this existing `skills` / `tools.py` layer intact
+- Document output formatting (bullets, table support, styling is an ongoing area of improvement)

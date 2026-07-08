@@ -1,6 +1,91 @@
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent
+SRC_DIR = REPO_ROOT / "src"
+OUTPUT_DIR = REPO_ROOT / "outputs"
+sys.path.insert(0, str(SRC_DIR))
+
+from agent import DeepAgent, langfuse
+from scenarios import SCENARIOS
+from tui import print_banner, console
+
 def main():
-    print("Hello from deep-agent-suite!")
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        _run_single(SCENARIOS[int(sys.argv[1])])
+        return
+    if len(sys.argv) > 1:
+        _run_single({"name": "custom", "prompt": " ".join(sys.argv[1:]), "expected_outputs": []})
+        return
+    
+    _ensure_seed_files()
+    print_banner("Deep Agent Suite - interactive session")
+    print("Type a task for the agent, or 'quit' to exit.")
+    print("Supported areas: reading/summarizing .pptx/.docx/.xlsx files, building spreadsheets "
+          "with live formulas, writing Word reports, and adding PowerPoint slides.\n")
+    session_user_id = "user_101"
+    #Add input-related changes here, such as the user being able to choose their own identifiers
+    while True:
+        user_prompt = console.input("> ").strip()
+        if not user_prompt or user_prompt.lower() in ("quit", "exit"):
+            print("Session ended")
+            break
 
+        console.print(f"\nRunning: {user_prompt}\n")
 
-if __name__ == "__main__":
+        orchestrator = DeepAgent(objective=user_prompt, user_id=session_user_id) 
+        try: 
+            orchestrator.execute_react_loop()
+        finally:
+            langfuse.flush()
+        print()
+
+def _run_single(scenario):
+    _ensure_seed_files()
+    print_banner(f"Running scenario: {scenario['name']}")
+    orchestrator = DeepAgent(objective=scenario["prompt"], user_id="user_101")
+    try:
+        orchestrator.execute_react_loop()
+    finally:
+        langfuse.flush()
+
+def _ensure_seed_files():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    _ensure_seed_pptx()
+    _ensure_seed_docx()
+
+def _ensure_seed_pptx():
+    seed_path = OUTPUT_DIR / "sales.pptx"
+    if seed_path.exists():
+        return
+    #try to get it to create an actual presentation when needed
+    #Can be done with a template or smth of the sort
+    from pptx import Presentation
+    pres = Presentation()
+    slide_1 = pres.slides.add_slide(pres.slide_layouts[0])
+    slide_1.shapes.title.text = "Q3 Corporate Revenue Summary"
+    slide_2 = pres.slides.add_slide(pres.slide_layouts[1])
+    slide_2.shapes.title.text = "Financial Targets"
+    body_shape = slide_2.shapes.placeholders[1]
+    tf = body_shape.text_frame
+    tf.text = "Core Performance Metrics:"
+    tf.add_paragraph().text = "- Expected License Sales: 50000"
+    tf.add_paragraph().text = "- Projected Cloud Revenue: 120000"
+    tf.add_paragraph().text = "- Consulting Services: 30000"
+    pres.save(str(seed_path))
+    print(f"Created missing data-seeded presentation: {seed_path}")
+
+def _ensure_seed_docx():
+    seed_path = OUTPUT_DIR / "executive_report.docx"
+    if seed_path.exists():
+        return
+    
+    from docx import Document
+    doc = Document()
+    doc.add_heading("Executive Report", level=0)
+    doc.add_paragraph("Placeholder report - populated by earlier scenario runs.")
+    doc.save(str(seed_path))
+    print(f"Created missing placeholder report: {seed_path}")
+
+if __name__=="__main__":
     main()

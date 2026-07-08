@@ -1,16 +1,23 @@
 import os
 import json
 import sys
-import shutil
+import time
 from dotenv import load_dotenv
 from pathlib import Path
 from groq import Groq
+from langfuse import observe, get_client, propagate_attributes
 
+from tools import TOOL_REGISTRY, TOOLS_SCHEMA
 from memory import LongTermMemoryStore
 from sandbox import AgentSandbox
+from tui import (
+    print_round, print_thought, print_tool_output, print_tool_call,
+    print_subagent_start, print_subagent_tool, print_rate_limit
+)
 
 root_dir = Path(__file__).resolve().parent
 load_dotenv(dotenv_path=root_dir / ".env")
+langfuse = get_client()
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__))) 
 
@@ -23,161 +30,209 @@ else:
     print("Critical System Error: GROQ_API_KEY was not detected in your workspace .env file.")
     sys.exit(1)
 
+DELEGATE_TOOL_SCHEMA = {"type": "function", "function": {
+    "name": "delegate_subagent",
+    "description": "Delegate a skill-governed subtask to an isolated subagent that has the skill's full blueprint and matching tool access.",
+    "parameters": {"type": "object", "properties": {
+        "skill": {"type": "string", "description": "Skill folder name, e.g. 'xlsx', 'docx', 'pptx'."},
+        "prompt": {"type": "string", "description": "Task instructions for the subagent."}
+    }, "required": ["skill", "prompt"]}
+}}
 
 class DeepAgent:
     def __init__(self, objective: str, user_id: str):
         self.objective = objective
         self.max_execution_rounds = 4
-
-        self.memory_store = LongTermMemoryStore()
+        self.subagent_max_rounds = 3
         self.user_namespace = user_id
+
         self.sandbox = AgentSandbox(scope="assistant", identifier="global")
+        self.memory_store = LongTermMemoryStore(filename=self.sandbox.output_dir / "long_term_store.json")
 
-        self.skills_rubric = {
-            "docx": "Exclusively for word processing. Extract contents via 'read_office_file'. To generate executive summary papers or project files, utilize 'create_word_document'. Append audit trails using 'append_text_to_document'.",
-            "pptx": "Handles slide decks. Read layout files via 'read_office_file'. Append summary findings or update presentation structures dynamically using 'modify_presentation_metadata'.",
-            "xlsx": "Handles tabular formats. CRITICAL CONSTRAINT: Enforce formula injection! Never hardcode calculations. Write live formulas (e.g., =SUM(B1:B10)) via 'create_xlsx_with_formulas'."
-        }
+        self.available_skills_index = self._discover_available_skills()
 
-    def spawn_worker_subagent(self, context_key: str, worker_prompt: str) -> str:
-        print(f"Synchronous Subagent for context: {context_key}")
-        
-        subagent_base_prompt = (
-            f"You are a specialized engineering subagent workspace runner.\n"
-            f"Your strict domain parameter boundaries are: {self.skills_rubric.get(context_key, '')}\n"
-            f"Execute your assigned task diligently and return only your completed findings."
-        )
+    def _build_system_prompt(self) -> str:
+        tool_list = "\n".join(f"  - {name}" for name in TOOL_REGISTRY.keys())
 
-        messages = [
-            {"role": "system", "content": subagent_base_prompt},
-            {"role": "user", "content": worker_prompt}
-        ]
-        res = client.chat.completions.create(model=MODEL_NAME, messages=messages, temperature=0.2)
-        return res.choices[0].message.content
+        if self.available_skills_index:
+            skills_list = "\n".join(
+                f"  - {name}: {meta.get('description', 'No description provided.')} "
+                f"(relevant tools: {meta.get('tools', 'unspecified')})"
+                for name, meta in self.available_skills_index.items()
+            )
+        else:
+            skills_list = "  (no skills discovered under ./skills — proceeding with raw tools only)"
+        prior_context = self.memory_store.get_all_context(self.user_namespace)
+        return f"""You are a master deep agent cluster supervisor orchestration loop engine.
+PRIOR SESSION CONTEXT:
+{prior_context}
 
-    
-    def execute_react_loop(self):
-        historical_context = self.memory_store.get_all_context(self.user_namespace)
+AVAILABLE SKILLS (each is a folder under ./skills with detailed instructions):
+{skills_list}
 
-        base_system_prompt = f"""You are a master deep agent cluster supervisor. You orchestrate file mutations and guide subagents.
-Instead of doing manual work yourself, delegate specific components to subagents or run sandbox tools.
+To use a skill's full instructions before delegating work on it, call the 'load_skill_blueprint'
+tool with the skill's folder name. To delegate the actual execution of a skill's task to an
+isolated subagent, use the 'delegate_subagent' action with a "skill" field set to that skill's
+folder name.
 
-To invoke tool chains inside your sandbox workspace, respond using this JSON structure:
-{{
-    "action": "call_tool",
-    "tool_name": "create_xlsx_with_formulas",
-    "args": {{"filepath": "ledger.xlsx", "json_data_matrix": [["Total", "=SUM(B2:B3)"]]}}
-}}
+AVAILABLE RAW TOOLS (call directly when no skill applies, or as instructed by a skill):
+{tool_list}
 
-To delegate complex research or validation tasks to an isolated subagent:
-{{
-    "action": "delegate_subagent",
-    "skill_context_key": "xlsx",
-    "prompt": "Audit the formula layout structure to verify no values are hardcoded."
-}}
-
-To execute environment terminal setup operations via your tool setup:
-{{
-    "action": "call_tool",
-    "tool_name": "execute_shell_command",
-    "args": {{"command": "ls -la"}}
-}}
-
-[LONG-TERM MEMORY ENVIRONMENT CONTEXT]:
-{historical_context}
-
-[ACTIVE SKILLS BLUEPRINT REFERENCE]:
-{json.dumps(self.skills_rubric)}
+CRITICAL ARCHITECTURAL CONSTRAINTS:
+- Prefer delegating skill-governed work (xlsx/docx/pptx tasks) to a subagent via 'delegate_subagent' with the
+  matching "skill" name, rather than calling tools directly yourself, so the skill's constraints are enforced.
+- If the user's request has nothing to do with reading, creating, or editing .pptx/.docx/.xlsx
+   files, say so plainly in your final response rather than attempting an unrelated task.
 """
 
-        messages = [
-            {"role": "system", "content": base_system_prompt},
-            {"role": "user", "content": self.objective}
-        ]
+    def _discover_available_skills(self) -> dict:
+        skills_map = {}
+        repo_root = Path(__file__).resolve().parent.parent
+        skill_root = repo_root / "skills"
 
-        for loop_idx in range(1, self.max_execution_rounds + 1):
-            print(f"\n Loop Round {loop_idx} out of {self.max_execution_rounds}")
-            res = client.chat.completions.create(model=MODEL_NAME, messages=messages, temperature=0.2)
+        if not skill_root.exists():
+            return {}
+        
+        for folder in skill_root.iterdir():
+            if not folder.is_dir():
+                continue
+
+            skill_file = folder / "SKILL.md"
+            if not skill_file.exists():
+                continue
             
-            thought = res.choices[0].message.content
-            print(f"Agent Thought Process: \n {thought}")
-            messages.append({"role": "assistant", "content": thought})
+            try:
+                with open(skill_file, "r", encoding="utf-8") as f:
+                    text = f.read()
 
-            executed_any = False
-            bracket_count = 0
-            start_idx = -1
-            
-            for idx, char in enumerate(thought):
-                if char == '{':
-                    if bracket_count == 0:
-                        start_idx = idx
-                    bracket_count += 1
-                elif char == '}':
-                    bracket_count -= 1
-                    if bracket_count == 0 and start_idx != -1:
-                        json_string = thought[start_idx:idx+1]
-                        try:
-                            payload = json.loads(json_string)
-                            if "action" in payload:
-                                executed_any = True
-                                if payload["action"] == "call_tool":
-                                    tool_return = self.sandbox.run_sandbox_tool(payload["tool_name"], **payload["args"])
-                                    print(f"Tool [{payload['tool_name']}] Output: {tool_return}")
-                                    messages.append({"role": "user", "content": f"Tool Execution Output: {tool_return}"})
+                if not text.startswith("---"):
+                    continue
 
-                                elif payload["action"] == "delegate_subagent":
-                                    sub_return = self.spawn_worker_subagent(payload["skill_context_key"], payload["prompt"])
-                                    print(f"Subagent Worker Output:\n{sub_return}")
-                                    messages.append({"role": "user", "content": f"Subagent Output: {sub_return}"})
-                        except Exception as json_err:
-                            print(f"Individual block parsing skipped: {str(json_err)}")
-                        start_idx = -1
+                meta_section = text.split("---")[1]
+                meta_data = {}
+                for line in meta_section.strip().split("\n"):
+                    if ":" in line:
+                        k, v = line.split(":", 1)
+                        meta_data[k.strip()] = v.strip()
 
-            if executed_any:
-                continue  
-            break
+                skills_map[folder.name] = meta_data
+            except Exception:
+                continue
 
-        self.memory_store.save_memory(
-            self.user_namespace,
-            "last_executed_summary",
-            {"objective_status": "Success", "handled_path": "ledger.xlsx"}
+        return skills_map
+    
+    @observe
+    def spawn_worker_subagent(self, skill_name: str, worker_prompt: str) -> str:
+        print_subagent_start(skill_name)
+        
+        skill_blueprint = self.sandbox.run_sandbox_tool("load_skill_blueprint", skill_name=skill_name)
+
+        skill_meta = self.available_skills_index.get(skill_name.split("/")[0], {})
+        allowed_names = [t.strip() for t in skill_meta.get("tools", "").split(",") if t.strip()]
+        subagent_tools = [t for t in TOOLS_SCHEMA if t["function"]["name"] in allowed_names] or TOOLS_SCHEMA
+
+        subagent_system_prompt = (
+            "You are a specialized document engineering subagent.\n"
+            "Follow this skill blueprint exactly:\n\n"
+            f"{skill_blueprint}\n\n"
+            "Use the provided tools to actually create/modify files. Once the task is fully done, "
+            "respond with a short plain-text summary and make no further tool calls."
         )
 
-        self.sandbox.close_and_cleanup()
 
-if __name__ == "__main__":
-    extended_cross_functional_objective = (
-        "1. Read the text layouts out of 'sales.pptx'.\n"
-        "2. Synthesize that financial data to build a clean spreadsheet named 'ledger.xlsx' enforcing strict dynamic formula injection for totals.\n"
-        "3. Generate a comprehensive project narrative file named 'executive_report.docx' outlining our findings.\n"
-        "4. Deploy an isolated subagent worker to run a verification layout checklist on the spreadsheet, and append those final audit notes directly to the bottom of the Word document report."
-    )
-    
-    orchestrator = DeepAgent(objective=extended_cross_functional_objective, user_id="user_101")
+        messages = [
+            {"role": "system", "content": subagent_system_prompt},
+            {"role": "user", "content": worker_prompt}
+        ]
 
-    local_source_file = Path("sales.pptx")
-    if not local_source_file.exists():
-        from pptx import Presentation
-        prs = Presentation()
-        
-        slide_1 = prs.slides.add_slide(prs.slide_layouts[0])
-        slide_1.shapes.title.text = "Q3 Corporate Revenue Summary"
-        
-        slide_2 = prs.slides.add_slide(prs.slide_layouts[1])
-        slide_2.shapes.title.text = "Financial Targets"
-        body_shape = slide_2.shapes.placeholders[1]
-        tf = body_shape.text_frame
-        tf.text = "Core Performance Metrics:"
-        tf.add_paragraph().text = "- Expected License Sales: 50000"
-        tf.add_paragraph().text = "- Projected Cloud Revenue: 120000"
-        tf.add_paragraph().text = "- Consulting Services: 30000"
-        
-        prs.save(str(local_source_file))
-        print(f"Created missing data-seeded presentation: {local_source_file}")
-    else:
-        if local_source_file.stat().st_size < 30000:  
-            local_source_file.unlink()
-            print("Cleared old empty presentation file cache. Please re-run the script to execute with fresh data seeding.")
-            sys.exit(0)
+        findings = "Subagent did not produce a final summary within its round budget."
 
-    orchestrator.execute_react_loop()
+        for round_idx in range(1, self.subagent_max_rounds + 1):
+            res = self._call_model(messages, tools=subagent_tools)
+            msg = res.choices[0].message
+
+            if msg.tool_calls:
+                messages.append(msg.model_dump(exclude_none=True))
+                for tc in msg.tool_calls:
+                    name = tc.function.name
+                    try:
+                        args = json.loads(tc.function.arguments)
+                    except Exception:
+                        args = {}
+                    result = self.sandbox.run_sandbox_tool(name, **args)
+                    print_subagent_tool(skill_name, name, result)
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": str(result)})
+            else:
+                findings = msg.content or findings
+                break
+
+        return findings
+
+    @observe()
+    def execute_react_loop(self):
+        with propagate_attributes(user_id=self.user_namespace, tags=[self.objective[:60]]):
+            base_system_prompt = self._build_system_prompt()
+
+            messages = [
+                {"role": "system", "content": base_system_prompt},
+                {"role": "user", "content": self.objective}
+            ]
+
+            all_tools = TOOLS_SCHEMA + [DELEGATE_TOOL_SCHEMA]
+
+            for loop_idx in range(1, self.max_execution_rounds + 1):
+                print_round(loop_idx, self.max_execution_rounds)
+                res = self._call_model(messages, tools=all_tools)
+                msg = res.choices[0].message
+
+                if msg.tool_calls:
+                    messages.append(msg.model_dump(exclude_none=True))
+                    for tc in msg.tool_calls:
+                        name = tc.function.name
+                        try:
+                            args = json.loads(tc.function.arguments)
+                        except Exception:
+                            args = {}
+
+                        if name == "delegate_subagent": 
+                            result = self.spawn_worker_subagent(args.get("skill", ""), args.get("prompt", ""))
+                        else:
+                            print_tool_call(name, args)
+                            result = self.sandbox.run_sandbox_tool(name, **args)
+                        
+                        print_tool_output(name, result)
+                        messages.append({"role": "tool", "tool_call_id": tc.id, "content": str(result)})
+                else:
+                    print_thought(msg.content)
+                    messages.append({"role": "assistant", "content": msg.content or ""})
+                    break
+
+            self.memory_store.save_memory(
+                self.user_namespace,
+                "last_executed_summary",
+                {"objective_status": "Success", "objective": self.objective}
+            )
+            self.sandbox.close_and_cleanup()
+
+    def _call_model(self, messages, tools=None):
+        wait = 15
+        for attempt in range(1, 7):
+            try:
+                if tools:
+                    return client.chat.completions.create(
+                        model=MODEL_NAME, messages=messages, tools=tools,
+                        tool_choice="auto", temperature=0.2
+                    )
+                return client.chat.completions.create(model=MODEL_NAME, messages=messages, temperature=0.2)
+            except Exception as e:
+                err_text = str(e).lower()
+                if "rate_limit" in err_text or "429" in err_text:
+                    print_rate_limit(wait, attempt, 6, detail=str(e))
+                    time.sleep(wait)
+                    wait = min(wait * 2, 90)
+                    continue
+                if "tool_use_failed" in err_text and attempt < 3:
+                    print_rate_limit(0, attempt, 6, detail=f"Malformed too call, retrying: {e}")
+                    continue
+                raise
+        raise RuntimeError("Exceeded retry attempts due to rate limiting.")

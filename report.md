@@ -1,43 +1,27 @@
-# System Evaluation Report: Lightweight Deep Agent Harness
+# Project Report: Deep Agent Suite
 
-## 1. Executive Summary and the Infrastructure Layer
+## 1. Purpose
 
-This project successfully implements an automated multi-agent cluster pipeline optimized for enterprise document parsing and structural file generation. 
+This project builds a "deep agent" supervisor model that delegates work to isolated subagents, for a specific task domain currently including: reading, generating, and editing Office documents (`.pptx`, `.docs`, `.xlsx`). The goal was not just to get a model calling tools, but to make it use a genuine skill system: personally-written contraint documents (SKILL.md) that govern how each document type should be handled, loaded on demand rather than embeded permenantly into the system prompt.
 
-- Main Supervisor Loop Model: `openai/gpt-oss-120b` (via Groq Client API)
-- Sub-Agent Worker Model: `openai/gpt-oss-120b` (via Groq Client API)
-- Telemetry State Integration: 4-Round Iterative ReAct Framework
-- Target Document Footprint: PowerPoint (`.pptx`), Excel (`.xlsx`), Word (`.docx`)
+## 2. Architecture
 
-## 2. Real-World Execution Trace Analysis
+**Supervisor/subagent split**: A single supervisor loop `DeepAgent.execute_react_loop` plans and either calls tools directly or delegates a subtask to a subagent scoped to one skill `spawn_worker_subagent`. Each subagent runs its own bounded tool-calling loop, restricted to only the tools its assigned skill's frontmatter lists, which keep a subagent from calling on the wrong/unrelated skill.
 
-The framework was evaluated against a multi-step cross-functional objective: extract revenue metrics from a presentation slide deck (`sales.pptx`), generate an interactive accounting spreadsheet (`ledger.xlsx`), compile an executive text narrative (`executive_report.docx`), and deploy a specialized sub-agent to audit the formula layout and append its verification footprint.
+**Skills as data, not as prompts**: Each skill is a folder under `skills/` with a `SKILL.md`: providing a YAML-style frontmatter (including: description, tools, triggers) which the supervisor sees as a one-line summary, plus a full constraints body that only the subagent sees after explicitly requesting it via the `load_skill_blueprint` tool call. Multi-file skills: currently it's onyl pptx, that has `editing.md` and `pptxgenjs.md` above just having `SKILL.md`, the model uses `folder/file-stem` addressing to reach a specific reference file.
 
-## The Trace Pipeline Log Details:
-1. Loop Round 1 - Document Extraction: The orchestrator discovered a missing source file, automatically seeded a mock presentation via `python-pptx`, and called the `read_office_file` tool wrapper. It leverages Microsoft's `MarkItDown` engine to parse the text layers out of the target slide container, extracting three core variabels:
-    * Expected License Sales: 50,000
-    * Project Cloud Revenue: 120,000
-    * Estimated Consulting Fees: 30,000
-2. Loop Round 2 - Parallel Synthesis & Worker Delegation: The main supervisor bundled three complex operations into a single execution turn:
-    - It passed the extracted figures to `create_xlsx_with_formulas`, right after it built `ledger.xlsx` with active math formula strings.
-    - It invoked the parameter-matched `create_word_document` tool, and generated `executive_report.docx`.
-    - It spawned the specialized `.xlsx` sub-agent worker, handing it a layout audit checklist.
-3. Loop round 3 - Sub-Agent QA Verification: The sub-agent compiled its own evaluation matrix script using the `openpyxl` to programmatically crosscheck data types and column configurations. It onfirmed that all cells were numeric, no hidden columns existed, and harcoded numbers were replaced with live formula tracking. It then appended the official audit note: *“Spreadsheet audit passed: all formulas dynamic, no hard‑coded totals.”* directly to the bottom of the Word report.
-4. Loop Round 4 - Workspace Teardown: The supervisor verifiedthe sub-agent's success response. Finding its objectives completely fulfilled, it exited the execution state machine early, saved the metadata logging variables down to the `LongTermMemoryStore`, and executed the sandbox's `close_and_cleanup()` sequence.
+**Native tool calling**: Early versins parsed JSON action blocks out of plain model text. This disrupted the process during practice as some models spontaneously emit their own internal function-call syntax regardless of prompting, which the API layer then rejects if no formal `tools=` schema was declared. This fix that I applied here was declaring a real tool schema, `TOOL_SCHEMA` in tools.py and read structured `tool_calls` off the reponse directly, in turn eliminating an entire class of slient failures where the subagent appeared to do nothing because its actual tool-call attempt was never being read form the right place in the response object.
 
-## 3. Engineering Insights & Architectural Takeaways
+**Sandboxed, location-independent output**: All file writings are resolved through `AgentSandbox`, which maps any relative filname that a tool receives into an absolute path inside `outputs/` at the repo root. This replaced an earlier design where file location depended on the processe's working directory at launch time, which creted confusion with "file not found" failures when the harness and direct runs had different working directories.
 
-By designing this lightweight agent core around the specifications of the Anthropic and LangChain frameworks, several technical insights were observed:
-
-1. **Markdown Extraction (Zero-Dependency parsing)**: Traditional agent frameworks rely on massive software packages like LibreOffice or headless browser containers to scrape data. By deploying Microsoft's `markitdown` library inside the `tools.py` file, the system converts binary XML files into Markdown text streams, thus cutting down latency.
-2. **Context Isolation vs. Prompt Bloat**: Feeding exhaustive spreadsheet formatting rubrics and programmatic checklist checks directly into the main supervisor prompt window results in token bloat and dilutes attention. Forcing the supervisor to delegate validation loops to an isolated sub-agent via structured JSON commands keeps the primary planner highly efficient, while ensuring the validation report is detailed, informative, and secure.
-3. **Dynamic Parameter Adaptability**: AI models frequently vary keyword parameters when interfacing with custom tool definitions. By designing adaptive argument wrappers inside `tools.py` (e.g., matching the model's choice of `content` across both `Word` and `log` generation), the supervisor successfully routes multi-tool payloads without throwing missing positional argument exceptions.
+## 3. Building process
 
 
-# 4. Architectural Evaluation: Trade-offs and Limitations
 
-| Architectural Choice | Structural Advantages | Strategic Disadvantages / Risks |
-| :--- | :--- | :--- |
-| **Assistant-Scoped Sandbox** | • Fast execution across consecutive turns.<br>• Retains working files across the entire session. | • Accumulates unmanaged files if loop fails.<br>• Risk of cross-thread state pollution. |
-| **Character-Level JSON Extraction** | • Parses conversational thoughts and tool payloads simultaneously.<br>• Flexible model formatting. | • Breaks if JSON arguments contain unbalanced raw brackets.<br>• High sensitivity to syntax variations. |
-| **File-Backed JSON Memory Store** | • Human-readable flat log configuration.<br>• Zero external infrastructure dependencies. | • Lacks thread-safe atomic lock writing operations.<br>• Suboptimal for large storage contexts. |
+
+# 4. Current status
+
+- Skill system, native tool calling, and sandbox output are all working and have been verified across the 5 example scenarios via `run_all_scenarios.py`
+- Interactive sessions mode accepts arbitrary free-form prompts, not just the built-in scenarios
+- Terminal output uses rich-based colored panels distinguishing supervisor thoughts, tool calls, tool outputs, and subagent activity
+- Langfuse tracing is wired in, tagging each run with its objective and user id for reviewing whether skill delegation is actually happening as intended
