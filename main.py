@@ -12,10 +12,10 @@ from tui import print_banner, console
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
-        _run_single(SCENARIOS[int(sys.argv[1])])
+        _run_single(SCENARIOS[int(sys.argv[1])], user_id=_default_user_id())
         return
     if len(sys.argv) > 1:
-        _run_single({"name": "custom", "prompt": " ".join(sys.argv[1:]), "expected_outputs": []})
+        _run_single({"name": "custom", "prompt": " ".join(sys.argv[1:]), "expected_outputs": []}, user_id=_default_user_id())
         return
     
     _ensure_seed_files()
@@ -23,8 +23,10 @@ def main():
     print("Type a task for the agent, or 'quit' to exit.")
     print("Supported areas: reading/summarizing .pptx/.docx/.xlsx files, building spreadsheets "
           "with live formulas, writing Word reports, and adding PowerPoint slides.\n")
-    session_user_id = "user_101"
-    #Add input-related changes here, such as the user being able to choose their own identifiers
+    
+    typed_id = console.input(f"Session name (for '{_default_user_id()}'): ").strip()
+    session_user_id = typed_id or _default_user_id()
+
     while True:
         user_prompt = console.input("> ").strip()
         if not user_prompt or user_prompt.lower() in ("quit", "exit"):
@@ -40,10 +42,17 @@ def main():
             langfuse.flush()
         print()
 
-def _run_single(scenario):
+def _default_user_id() -> str:
+    import getpass
+    try:
+        return getpass.getuser() or "anonymous"
+    except Exception:
+        return "anonymous"
+
+def _run_single(scenario, user_id="anonymous"):
     _ensure_seed_files()
     print_banner(f"Running scenario: {scenario['name']}")
-    orchestrator = DeepAgent(objective=scenario["prompt"], user_id="user_101")
+    orchestrator = DeepAgent(objective=scenario["prompt"], user_id=user_id)
     try:
         orchestrator.execute_react_loop()
     finally:
@@ -77,7 +86,7 @@ def _ensure_seed_pptx():
 
 def _ensure_seed_docx():
     seed_path = OUTPUT_DIR / "executive_report.docx"
-    if seed_path.exists():
+    if seed_path.exists() and _docx_is_valid(seed_path):
         return
     
     from docx import Document
@@ -86,6 +95,14 @@ def _ensure_seed_docx():
     doc.add_paragraph("Placeholder report - populated by earlier scenario runs.")
     doc.save(str(seed_path))
     print(f"Created missing placeholder report: {seed_path}")
+
+def _docx_is_valid(path) -> bool:
+    from docx import Document
+    try:
+        Document(str(path))
+        return True
+    except Exception:
+        return False
 
 if __name__=="__main__":
     main()

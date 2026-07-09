@@ -19,6 +19,9 @@ calculated value (totals, sums, averages, running balances).
 - Do not attempt to pass style/formatting arguments — they will be silently ignored.
 - Do not check whether an output file already exists before creating it — just create or overwrite it directly unless the task explicitly says to check first.
 - Never call a file-writing tool with placeholder, generic, or one-line content. Write out the full, specific content requested in the task (multiple sentences/rows/bullets as appropriate) before calling the tool — the tool call's arguments must contain the actual finished content, not a summary of what you plan to write.
+- Aim for real depth: a docx report section should be several sentences, a spreadsheet
+  should have multiple meaningful rows (not just one), and a slide should have several
+  bullet points, unless the task explicitly asks for something brief.
 
 ## Example call
 

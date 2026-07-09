@@ -18,6 +18,9 @@ slide to communicate a result (e.g. a summary slide appended after other work is
 - If the target `.pptx` file does not exist yet `modify_presentation_metadata` will create a new, empty presentation before adding the slide — confirm this is the intended behavior for the task rather than assuming a source file should already exist.
 - Do not check whether an output file already exists before creating it — just create or overwrite it directly unless the task explicitly says to check first.
 - Never call a file-writing tool with placeholder, generic, or one-line content. Write out the full, specific content requested in the task (multiple sentences/rows/bullets as appropriate) before calling the tool — the tool call's arguments must contain the actual finished content, not a summary of what you plan to write.
+- Aim for real depth: a docx report section should be several sentences, a spreadsheet
+  should have multiple meaningful rows (not just one), and a slide should have several
+  bullet points, unless the task explicitly asks for something brief.
 
 
 ## Example call
