@@ -62,6 +62,8 @@ def _ensure_seed_files():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     _ensure_seed_pptx()
     _ensure_seed_docx()
+    _ensure_seed_xlsx()
+
 
 def _ensure_seed_pptx():
     seed_path = OUTPUT_DIR / "sales.pptx"
@@ -103,6 +105,22 @@ def _docx_is_valid(path) -> bool:
         return True
     except Exception:
         return False
+
+def _ensure_seed_xlsx():
+    seed_path = OUTPUT_DIR / "q3_metrics.xlsx"
+    if seed_path.exists():
+        return
+
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Metric", "Value"])
+    ws.append(["License Sales", 50000])
+    ws.append(["Cloud Revenue", 120000])
+    ws.append(["Consulting Services", 30000])
+    ws.append(["Total", "=SUM(B2:B4)"])
+    wb.save(str(seed_path))
+    print(f"Created missing data-seeded spreadsheet: {seed_path}")
 
 if __name__=="__main__":
     main()
