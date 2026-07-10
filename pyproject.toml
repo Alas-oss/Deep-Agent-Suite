@@ -5,9 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "groq>=1.5.0",
+    "cerebras-cloud-sdk>=1.67.0",
+    "deepagents==0.6.12",
+    "langchain-cerebras>=0.8.2",
+    "langchain-groq>=0.3.0",
     "langfuse>=4.13.0",
-    "markitdown>=0.1.6",
+    "markitdown[all]>=0.1.5",
     "openai>=2.44.0",
     "openpyxl>=3.1.5",
     "pillow>=12.3.0",
@@ -16,3 +19,6 @@ dependencies = [
     "python-pptx>=1.0.2",
     "rich>=15.0.0",
 ]
+
+[tool.uv]
+prerelease = "allow"

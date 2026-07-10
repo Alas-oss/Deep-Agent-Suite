@@ -1,5 +1,5 @@
 import subprocess
-import sys 
+import sys
 from pathlib import Path
 import time
 
@@ -21,15 +21,20 @@ for idx, scenario in enumerate(SCENARIOS):
     print(f"\n Running scenario {idx}: {scenario['name']} ")
     cleanup_outputs(scenario)
 
-    proc = subprocess.run([sys.executable, "main.py", str(idx)], capture_output=True, text=True, cwd=REPO_ROOT)
+    # No capture_output here — stdout/stderr are inherited from this process,
+    # so main.py's live TUI (panels, timestamps, etc.) prints in real time
+    # instead of being buffered until the subprocess exits.
+    proc = subprocess.run(
+        [sys.executable, "main.py", str(idx)],
+        cwd=REPO_ROOT,
+    )
 
     missing = [f for f in scenario["expected_outputs"] if not (OUTPUT_DIR / f).exists()]
     passed = len(missing) == 0
 
     results.append({"scenario": scenario["name"], "passed": passed, "missing": missing})
     if not passed:
-        print(f"STDOUT: \n{proc.stdout[-2000:]}")
-        print(f"STDERR: \n{proc.stderr[-2000:]}")
+        print(f"[scenario {idx} failed — exit code {proc.returncode}, see output above]")
 
     if idx < len(SCENARIOS) - 1:
         print("Pausing 20s between scenarios to respect rate limits...")

@@ -1,4 +1,5 @@
 ---
+name: pptx
 description: Read data out of slide decks, or append new slides summarizing agent findings.
 tools: read_office_file, modify_presentation_metadata
 triggers: pptx, slide deck, presentation, slides
@@ -33,6 +34,5 @@ This skill has supplementary reference files in this same folder:
 - `editing.md` — detailed procedures for reading and modifying existing multi-slide decks
 - `pptxgenjs.md` — reference notes on slide layout/placeholder indices for generation
 
-These are not loaded automatically. If your task needs that level of detail, call
-`load_skill_blueprint` again with `skill_name="pptx/editing"` or `skill_name="pptx/pptxgenjs"`
-(folder/file-stem format).
+These are not loaded automatically. If your task needs that level of detail, use `read_file`
+on `skills/pptx/editing.md` or `skills/pptx/pptxgenjs.md` directly.

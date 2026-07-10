@@ -1,4 +1,5 @@
 ---
+name: docx
 description: Generate or append to Word documents that narrate findings, summaries, or audit notes.
 tools: create_word_document, append_text_to_document, read_office_file
 triggers: report, docx, word document, summary, narrative, audit notes

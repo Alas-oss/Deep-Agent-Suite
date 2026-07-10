@@ -1,4 +1,5 @@
 ---
+name: xlsx
 description: Build or edit spreadsheets that require live calculations rather than static numbers.
 tools: create_xlsx_with_formulas, read_office_file
 triggers: spreadsheet, xlsx, ledger, totals, sum, formula
