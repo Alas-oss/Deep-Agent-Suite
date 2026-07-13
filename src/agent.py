@@ -9,6 +9,7 @@ from langfuse.langchain import CallbackHandler
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemPermission
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from tools import ALL_TOOLS, TOOLS_BY_NAME
 from memory import LongTermMemoryStore
@@ -31,6 +32,18 @@ if provider == "cerebras":
     model = ChatCerebras(
         model="gpt-oss-120b",
         api_key=cerebras_key,
+        temperature=0.2,
+        timeout=60,
+        max_retries=2,
+    )
+elif provider == "gemini":
+    google_key = os.getenv("GOOGLE_API_KEY")
+    if not google_key:
+        print("Critical System Error: GOOGLE_API_KEY was not detected in your .env file.")
+        sys.exit(1)
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        api_key=google_key,
         temperature=0.2,
         timeout=60,
         max_retries=2,
@@ -126,6 +139,14 @@ class DeepAgent:
 
     def _build_skill_subagents(self) -> list[dict]:
         subagents = []
+        shared_reporting_rule = (
+            "\n\nIMPORTANT — reporting back to the supervisor: your final response to the "
+            "supervisor must be SHORT (2-4 sentences) — confirm what you did and the file "
+            "path, do not repeat the full content you extracted or wrote. If your task "
+            "involves large data (more than ~150 words), write the full detail to a file "
+            "with write_file first, and mention that file's path in your short summary "
+            "instead of pasting the content into your response."
+        )
         for skill_name, meta in self.available_skills_index.items():
             allowed = [t.strip() for t in meta.get("tools", "").split(",") if t.strip()]
             tools = [TOOLS_BY_NAME[t] for t in allowed if t in TOOLS_BY_NAME] or ALL_TOOLS
@@ -136,6 +157,7 @@ class DeepAgent:
                     "You are a specialized document engineering subagent.\n"
                     "Follow this skill blueprint exactly:\n\n"
                     f"{self._load_blueprint_body(skill_name)}"
+                    f"{shared_reporting_rule}"
                 ),
                 "tools": tools,
             })
@@ -170,6 +192,17 @@ CRITICAL ARCHITECTURAL CONSTRAINTS:
   subagent has amnesia about everything except what you just told it.
 - If the user's request has nothing to do with reading, creating, or editing .pptx/.docx/.xlsx
   files, say so plainly in your final response rather than attempting an unrelated task.
+- If a subagent returns a large or detailed result (more than a few short paragraphs)
+  that a later subagent needs, do NOT paste the full text into the next task description.
+  Instead, use write_file to save it to a temp path (e.g. /tmp_findings.md), and reference
+  that path in the next subagent's task description, telling it to read_file that path
+  first. This keeps individual model requests small and avoids provider request-size limits.
+- SUBAGENTS DO NOT SHARE YOUR CONTEXT. Each subagent starts with a blank slate and can
+  only see what you put directly into its task description. Assume the subagent has
+  amnesia about everything except what you just told it — never reference prior content
+  vaguely (e.g. "the summary from before"). For SHORT content (a few sentences), paste it
+  directly into the task description. For LARGE content, follow the file-based rule below
+  instead of pasting it inline.
 """
 
     def execute_react_loop(self):

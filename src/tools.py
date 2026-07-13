@@ -114,23 +114,38 @@ def append_text_to_document(filepath: str, content: str) -> dict:
         return {"success": False, "message": f"Failed to append content onto text file target: {str(e)}", "path": filepath}
 
 @tool
-def modify_presentation_metadata(filepath: str, action_type: str, raw_text_content: str) -> dict:
+def modify_presentation_metadata(filepath: str, action_type: str, raw_text_content: str, slide_title: str = "") -> dict:
     """Add a new slide to a PowerPoint file (creating the file if missing). Only
-    action_type='add_slide' is currently supported."""
+    action_type='add_slide' is currently supported.
+
+    slide_title: the specific, descriptive title for THIS slide (e.g. 'Average Lifespan',
+    not a generic label). Every slide must have a distinct title reflecting its own content.
+
+    IMPORTANT: there is no way to edit or delete a slide once added. Before your first call,
+    plan your complete list of slides and their titles. Call this tool exactly once per
+    planned slide — never speculatively, and never to redo a slide you already added.
+    Check the returned total_slides count after each call to track your progress."""
     filepath = _resolve(filepath)
     try:
         pres = Presentation(filepath) if os.path.exists(filepath) else Presentation()
         if action_type == "add_slide":
             slide = pres.slides.add_slide(pres.slide_layouts[1])
-            slide.shapes.title.text = "Automated Agent Update Output"
-            tf = slide.shapes.placeholders[1].text_frame
             lines = [l for l in raw_text_content.split("\n") if l.strip()]
-            tf.text = lines[0] if lines else ""
-            for line in lines[1:]:
+            title = slide_title.strip() or (lines[0] if lines else "Untitled Slide")
+            slide.shapes.title.text = title
+            body_lines = lines[1:] if lines and lines[0] == title else lines
+            tf = slide.shapes.placeholders[1].text_frame
+            tf.text = body_lines[0] if body_lines else ""
+            for line in body_lines[1:]:
                 tf.add_paragraph().text = line
-
         pres.save(filepath)
-        return {"success": True, "message": f"Modified PowerPoint file structure at {filepath}.", "path": filepath}
+        total = len(pres.slides)
+        return {
+            "success": True,
+            "message": f"Added slide '{title}'. The file now has {total} slide(s) total.",
+            "path": filepath,
+            "total_slides": total,
+        }
     except Exception as e:
         return {"success": False, "message": f"Presentation pipeline modifications failed: {str(e)}", "path": filepath}
     

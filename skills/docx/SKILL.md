@@ -21,6 +21,15 @@ additional findings/audit notes to an existing one.
 - Aim for real depth: a docx report section should be several sentences, a spreadsheet
   should have multiple meaningful rows (not just one), and a slide should have several
   bullet points, unless the task explicitly asks for something brief.
+- Default to narrative prose organized into headed sections (Introduction, Findings,
+  Analysis, Conclusion, etc.), not bullet lists — especially for reports built from
+  statistical or spreadsheet data. Write explanatory paragraphs that interpret and
+  connect the numbers, not just restate them as a list.
+- Only use bullet points for content that is genuinely a short enumerable list (e.g.
+  a checklist, a set of discrete recommendations) or when the task explicitly asks
+  for bullet points. A findings/analysis section built entirely of bullets is too
+  shallow — expand it into real paragraphs that explain what the data means, not
+  just what it says.
 
 
 ## Example call

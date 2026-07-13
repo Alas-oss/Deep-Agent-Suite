@@ -22,7 +22,16 @@ slide to communicate a result (e.g. a summary slide appended after other work is
 - Aim for real depth: a docx report section should be several sentences, a spreadsheet
   should have multiple meaningful rows (not just one), and a slide should have several
   bullet points, unless the task explicitly asks for something brief.
-
+- Do not check whether the TARGET FILE already exists before creating it — just create or
+  overwrite it directly unless the task explicitly says to check first. This does NOT mean
+  skip planning your slides.
+- Before your first `modify_presentation_metadata` call, decide your complete slide list —
+  how many slides, and each one's title and content — in your own reasoning. Then call the
+  tool exactly once per planned slide, in order. Never call it speculatively, to "try again,"
+  or to redo a slide you're unsure about — there is no edit/delete capability, so getting it
+  right the first time matters. If you find yourself calling this tool more than once for
+  what should be the same slide, stop and use the total_slides count in the tool's response
+  to figure out what's already there before continuing.
 
 ## Example call
 ```
