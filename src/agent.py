@@ -8,6 +8,7 @@ from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.middleware.filesystem import FilesystemPermission
 
 from tools import ALL_TOOLS, TOOLS_BY_NAME
 from memory import LongTermMemoryStore
@@ -71,6 +72,13 @@ class DeepAgent:
             backend=self.backend,
             subagents=self.subagents,
             system_prompt=self._build_system_prompt(),
+            permissions=[
+                FilesystemPermission(
+                    operations=["read", "write"],
+                    paths=["/**/*.docx", "/**/*.pptx", "/**/*.xlsx"],
+                    mode="deny",
+                ),
+            ],
         )
 
     def _discover_available_skills(self) -> dict:

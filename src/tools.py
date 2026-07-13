@@ -46,7 +46,7 @@ def create_xlsx_with_formulas(filepath: str, json_data_matrix: list) -> dict:
     """Create a new Excel spreadsheet. Pass json_data_matrix as a list of rows; any
     calculated cell must be a formula string starting with '=' (e.g. '=SUM(B2:B4)'),
     never a hardcoded number."""
-    filpath = _resolve(filepath)
+    filepath = _resolve(filepath)
     try:
         rows = json.loads(json_data_matrix) if isinstance(json_data_matrix, str) else json_data_matrix
 
@@ -67,7 +67,7 @@ def create_xlsx_with_formulas(filepath: str, json_data_matrix: list) -> dict:
             ws.column_dimensions[get_column_letter(col_idx)].width = max_len + 2
 
         wb.save(filepath)
-        return {"success": True, "message": f"Succesfully created Excel spreadsheet at{filepath}.", "path": filepath}
+        return {"success": True, "message": f"Successfully created Excel spreadsheet at {filepath}.", "path": filepath}
     except Exception as e:
         return {"success": False, "message": f"Spreadsheet build failed: {str(e)}", "path": filepath}
 
@@ -114,7 +114,7 @@ def append_text_to_document(filepath: str, content: str) -> dict:
         return {"success": False, "message": f"Failed to append content onto text file target: {str(e)}", "path": filepath}
 
 @tool
-def modify_presentation_metadata(filepath: str, action_type: str, raw_text_content: str, **kwargs) -> dict:
+def modify_presentation_metadata(filepath: str, action_type: str, raw_text_content: str) -> dict:
     """Add a new slide to a PowerPoint file (creating the file if missing). Only
     action_type='add_slide' is currently supported."""
     filepath = _resolve(filepath)
