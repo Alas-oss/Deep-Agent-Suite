@@ -2,14 +2,16 @@ import os
 import sys
 from dotenv import load_dotenv
 from pathlib import Path
+import groq
+import openai
 from langchain_cerebras import ChatCerebras
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemPermission
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from tools import ALL_TOOLS, TOOLS_BY_NAME
 from memory import LongTermMemoryStore
@@ -22,46 +24,17 @@ langfuse_handler = CallbackHandler()
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-provider = os.getenv("MODEL_PROVIDER", "cerebras")
-
-if provider == "cerebras":
-    cerebras_key = os.getenv("CEREBRAS_API_KEY")
-    if not cerebras_key:
-        print("Critical System Error: CEREBRAS_API_KEY was not detected in your .env file.")
-        sys.exit(1)
-    model = ChatCerebras(
-        model="gpt-oss-120b",
-        api_key=cerebras_key,
-        temperature=0.2,
-        timeout=60,
-        max_retries=2,
-    )
-elif provider == "gemini":
-    google_key = os.getenv("GOOGLE_API_KEY")
-    if not google_key:
-        print("Critical System Error: GOOGLE_API_KEY was not detected in your .env file.")
-        sys.exit(1)
-    model = ChatGoogleGenerativeAI(
-        model="gemini-3.5-flash",
-        api_key=google_key,
-        temperature=0.2,
-        timeout=60,
-        max_retries=2,
-    )
-else:
-    groq_key = os.getenv("GROQ_API_KEY")
-    if not groq_key:
-        print("Critical System Error: GROQ_API_KEY was not detected in your .env file.")
-        sys.exit(1)
-    model = ChatGroq(
-        model="openai/gpt-oss-120b",
-        api_key=groq_key,
-        temperature=0.2,
-        timeout=60,
-        max_retries=2,
-    )
-
+PROVIDER_CHAIN = ["cerebras", "groq", "gemini"]
 MAX_GRAPH_STEPS = 40
+
+
+def _build_model(provider: str):
+    if provider == "cerebras":
+        return ChatCerebras(model="gpt-oss-120b", api_key=os.getenv("CEREBRAS_API_KEY"), temperature=0.2, timeout=60, max_retries=2)
+    elif provider == "gemini":
+        return ChatGoogleGenerativeAI(model="gemini-flash-latest", api_key=os.getenv("GOOGLE_API_KEY"), temperature=0.2, timeout=60, max_retries=2)
+    else:
+        return ChatGroq(model="openai/gpt-oss-120b", api_key=os.getenv("GROQ_API_KEY"), temperature=0.2, timeout=60, max_retries=2)
 
 
 class DeepAgent:
@@ -79,20 +52,11 @@ class DeepAgent:
 
         self.available_skills_index = self._discover_available_skills()
         self.subagents = self._build_skill_subagents()
-
-        self.agent = create_deep_agent(
-            model=model,
-            backend=self.backend,
-            subagents=self.subagents,
-            system_prompt=self._build_system_prompt(),
-            permissions=[
-                FilesystemPermission(
-                    operations=["read", "write"],
-                    paths=["/**/*.docx", "/**/*.pptx", "/**/*.xlsx"],
-                    mode="deny",
-                ),
-            ],
-        )
+        self.permissions = [
+            FilesystemPermission(operations=["read", "write"], paths=["/**/*.docx", "/**/*.pptx", "/**/*.xlsx"], mode="deny"),
+            FilesystemPermission(operations=["write"], paths=["/outputs/**"], mode="interrupt"),
+        ]
+        self.agent = None
 
     def _discover_available_skills(self) -> dict:
         skills_map = {}
@@ -203,24 +167,42 @@ CRITICAL ARCHITECTURAL CONSTRAINTS:
   vaguely (e.g. "the summary from before"). For SHORT content (a few sentences), paste it
   directly into the task description. For LARGE content, follow the file-based rule below
   instead of pasting it inline.
+- Before delegating a task that references a specific filename, if you're not certain
+  it exists, have the relevant subagent check first (via glob or read_office_file) and
+  report back clearly if a named file cannot be found — rather than continuing to search
+  broadly or guessing at alternate names.
 """
 
     def execute_react_loop(self):
         print(f"[agent] starting run — objective: {self.objective[:80]}", flush=True)
         print(f"[agent] subagents loaded: {[s['name'] for s in self.subagents]}", flush=True)
-        result = stream_and_print(
-            self.agent,
-            {"messages": [{"role": "user", "content": self.objective}]},
-            config={
-                "callbacks": [langfuse_handler],
-                "metadata": {"user_id": self.user_namespace, "tags": [self.objective[:60]]},
-                "recursion_limit": MAX_GRAPH_STEPS,
-            },
-        )
-        self.memory_store.save_memory(
-            self.user_namespace,
-            "last_executed_summary",
-            {"objective_status": "Success", "objective": self.objective},
-        )
-        print(f"Local root workspace active. Files saved directly to {self.output_dir}")
-        return result
+        errors = []
+        for provider in PROVIDER_CHAIN:
+            print(f"[agent] trying provider: {provider}", flush=True)
+            try:
+                self.agent = create_deep_agent(
+                    model=_build_model(provider),
+                    backend=self.backend,
+                    subagents=self.subagents,
+                    system_prompt=self._build_system_prompt(),
+                    permissions=self.permissions,
+                )
+                result = stream_and_print(
+                    self.agent,
+                    {"messages": [{"role": "user", "content": self.objective}]},
+                    config={
+                        "callbacks": [langfuse_handler],
+                        "metadata": {"user_id": self.user_namespace, "tags": [self.objective[:60]]},
+                        "recursion_limit": MAX_GRAPH_STEPS,
+                    },
+                )
+                self.memory_store.save_memory(self.user_namespace, "last_executed_summary", {"objective_status": "Success", "objective": self.objective})
+                print(f"Local root workspace active. Files saved directly to {self.output_dir}")
+                return result
+            except Exception as e:
+                status = getattr(e, "status_code", None)
+                reason = "capacity/quota" if status in (429, 413) else f"error ({type(e).__name__}, status {status})"
+                print(f"[agent] {provider} failed — {reason}, trying next provider...", flush=True)
+                errors.append(f"{provider}: {type(e).__name__}: {e}")
+                continue
+        raise RuntimeError("All providers exhausted:\n" + "\n".join(errors))

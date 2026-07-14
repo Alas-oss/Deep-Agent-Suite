@@ -21,9 +21,6 @@ for idx, scenario in enumerate(SCENARIOS):
     print(f"\n Running scenario {idx}: {scenario['name']} ")
     cleanup_outputs(scenario)
 
-    # No capture_output here — stdout/stderr are inherited from this process,
-    # so main.py's live TUI (panels, timestamps, etc.) prints in real time
-    # instead of being buffered until the subprocess exits.
     proc = subprocess.run(
         [sys.executable, "main.py", str(idx)],
         cwd=REPO_ROOT,

@@ -75,19 +75,33 @@ def create_xlsx_with_formulas(filepath: str, json_data_matrix: list) -> dict:
 def create_word_document(filepath: str, content: str, title: str = "Executive Report") -> dict:
     """Create a new Word document with the given title and content. Use only when the
     target file does not already exist. Lines starting with '#' become headings; lines
-    starting with '- ' become bullet list items."""
+    starting with '- ' become bullet list items. Content must be primarily narrative
+    prose — bullet lines are capped at 35% of total content lines."""
     filepath = _resolve(filepath)
     try:
+        lines = [l for l in str(content).split("\n") if l.strip()]
+        bullet_lines = [l for l in lines if l.strip().startswith("- ")]
+        bullet_ratio = len(bullet_lines) / len(lines) if lines else 0
+
+        if bullet_ratio > 0.35:
+            return {
+                "success": False,
+                "message": (
+                    f"Rejected: {len(bullet_lines)} of {len(lines)} lines ({bullet_ratio:.0%}) "
+                    "are bullet points, exceeding the `35%` limit. Rewrite this content as "
+                    "connected narrative paragraphs. Call this tool again with revised content."
+                ),
+                "path": filepath,
+            }
+
         doc = Document()
         doc.add_heading(title, level=0)
-
-        lines = str(content).split("\n")
         for line in lines:
             if line.strip().startswith("#"):
                 doc.add_heading(line.replace("#", "").strip(), level=1)
             elif line.strip().startswith("- "):
                 doc.add_paragraph(line.strip()[2:], style="List Bullet")
-            elif line.strip():
+            else:
                 doc.add_paragraph(line)
 
         doc.save(filepath)
