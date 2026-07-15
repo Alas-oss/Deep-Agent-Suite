@@ -28,7 +28,7 @@ langfuse_handler = CallbackHandler()
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 PROVIDER_CHAIN = ["cerebras", "groq", "gemini"]
-MAX_GRAPH_STEPS = 40
+MAX_GRAPH_STEPS = 50
 
 
 def _build_model(provider: str):
@@ -151,7 +151,11 @@ class DeepAgent:
 
     CRITICAL ARCHITECTURAL CONSTRAINTS:
     - You MUST delegate any task touching a .pptx, .docx, or .xlsx file to the exact matching
-    subagent by name. Never use 'general-purpose' for these file types.
+    subagent by name — including verification, audit, or "check the file" steps. Never use
+    'general-purpose' for any task that requires reading or writing an office file, since
+    it does not have access to the office-file tools and will fail. If a step doesn't fit
+    neatly into docx-agent/pptx-agent/xlsx-agent's stated purpose but still involves an
+    office file, delegate to the subagent matching that file's extension anyway.
     - Do not explore the filesystem yourself before delegating — the subagent already knows
     where its target files live.
     - SUBAGENTS DO NOT SHARE YOUR CONTEXT. Each subagent starts with a blank slate and can
