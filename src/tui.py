@@ -20,8 +20,11 @@ def print_tool_call(name: str, args: dict) -> None:
 
 
 def print_tool_output(name: str, content) -> None:
-    console.print(Panel(str(content), title=f"[{_ts()}] tool output: {name}", border_style="green"))
-
+    style = "green"
+    text = str(content)
+    if "'pre_existing': True" in text or '"pre_existing": true' in text:
+        style = "bold red"
+    console.print(Panel(text, title=f"[{_ts()}] tool output: {name}", border_style=style))
 
 def print_subagent_start(name: str) -> None:
     console.print(Panel(f"delegate to skill '{name}'", title=f"[{_ts()}] subagent", border_style="magenta"))

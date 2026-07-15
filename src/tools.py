@@ -78,6 +78,7 @@ def create_word_document(filepath: str, content: str, title: str = "Executive Re
     starting with '- ' become bullet list items. Content must be primarily narrative
     prose — bullet lines are capped at 35% of total content lines."""
     filepath = _resolve(filepath)
+    pre_existing = os.path.exists(filepath)
     try:
         lines = [l for l in str(content).split("\n") if l.strip()]
         bullet_lines = [l for l in lines if l.strip().startswith("- ")]
@@ -105,7 +106,7 @@ def create_word_document(filepath: str, content: str, title: str = "Executive Re
                 doc.add_paragraph(line)
 
         doc.save(filepath)
-        return {"success": True, "message": f"Generated a Microsoft Word narrative file at {filepath}.", "path": filepath}
+        return {"success": True, "message": f"{'Overwrote existing' if pre_existing else 'Created new'} Word Document at {filepath}.", "path": filepath, "pre_existing": pre_existing,}
     except Exception as e:
         return {"success": False, "message": f"Word document creation failed: {str(e)}", "path": filepath}
 
